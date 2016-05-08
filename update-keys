@@ -29,7 +29,7 @@ mkdir master packager
 while read -ra data; do
 	keyid="${data[0]}"
 	username="${data[@]:1}"
-	${GPG} --recv-keys ${keyid} &>/dev/null
+	${GPG} --recv-keys ${keyid} --keyserver pgp.mit.edu &>/dev/null
 	printf 'minimize\nquit\ny\n' | \
 		${GPG} --command-fd 0 --edit-key ${keyid}
 	${GPG} --yes --lsign-key ${keyid} &>/dev/null
@@ -41,7 +41,7 @@ ${GPG} --import-ownertrust < bbs-trusted 2>/dev/null
 while read -ra data; do
 	keyid="${data[0]}"
 	username="${data[@]:1}"
-	${GPG} --recv-keys ${keyid} &>/dev/null
+	${GPG} --recv-keys --keyserver pgp.mit.edu ${keyid} &>/dev/null
 	printf 'clean\nquit\ny\n' | \
 		${GPG} --command-fd 0 --edit-key ${keyid}
 	FD=$(mktemp)
@@ -53,6 +53,7 @@ while read -ra data; do
 	fi
 done < packager-keyids
 
-cat master/*.asc packager/*.asc > bbs.gpg
+#cat master/*.asc packager/*.asc > bbs.gpg
+cat master/*.asc > bbs.gpg
 
 popd >/dev/null
