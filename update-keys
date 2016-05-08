@@ -1,0 +1,58 @@
+#!/bin/bash
+
+export LANG=C
+
+TMPDIR=$(mktemp -d)
+trap "rm -rf '${TMPDIR}'" EXIT
+
+KEYSERVER='hkp://pgp.mit.edu'
+GPG="gpg --quiet --batch --no-tty --no-permission-warning --keyserver "${KEYSERVER}" --homedir ${TMPDIR}"
+
+pushd "$(dirname "$0")" >/dev/null
+
+$GPG --gen-key <<EOF
+%echo Generating BBS Keyring keychain master key...
+Key-Type: RSA
+Key-Length: 1024
+Key-Usage: sign
+Name-Real: Blackbird Keyring Keychain Master Key
+Name-Email: jeremydeininger@gmail.com
+Expire-Date: 0
+%no-protection
+%commit
+%echo Done
+EOF
+
+rm -rf master packager bbs-trusted
+mkdir master packager
+
+while read -ra data; do
+	keyid="${data[0]}"
+	username="${data[@]:1}"
+	${GPG} --recv-keys ${keyid} &>/dev/null
+	printf 'minimize\nquit\ny\n' | \
+		${GPG} --command-fd 0 --edit-key ${keyid}
+	${GPG} --yes --lsign-key ${keyid} &>/dev/null
+	${GPG} --armor --output master/${username}.asc --export ${keyid}
+	echo "${keyid}:4:" >> bbs-trusted
+done < master-keyids
+${GPG} --import-ownertrust < bbs-trusted 2>/dev/null
+
+while read -ra data; do
+	keyid="${data[0]}"
+	username="${data[@]:1}"
+	${GPG} --recv-keys ${keyid} &>/dev/null
+	printf 'clean\nquit\ny\n' | \
+		${GPG} --command-fd 0 --edit-key ${keyid}
+	FD=$(mktemp)
+	exec 4>"${FD}"
+	if ! ${GPG} --list-keys --with-colons ${keyid} 2>/dev/null | grep -q '^pub:f:'; then
+		echo "key is not fully trusted: ${keyid} ${username}"
+	else
+		${GPG} --armor --output packager/${username}.asc --export ${keyid}
+	fi
+done < packager-keyids
+
+cat master/*.asc packager/*.asc > bbs.gpg
+
+popd >/dev/null
